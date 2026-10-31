@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.vercel/
+
+# Songs are copyrighted and ~5 GB: keep them local. The theme lists are kept.
+songs/*
+!songs/.gitkeep
+!songs/themes.json
