@@ -73,7 +73,7 @@ input[type=range]{accent-color:var(--accent)}
 .controls input{flex:1;min-width:60px}
 .list{list-style:none;margin:0;padding:0;overflow-y:auto;overflow-x:hidden;flex:1;border-top:1px solid var(--line)}
 .list button{width:100%;text-align:left;overflow-wrap:anywhere;background:none;border:0;border-bottom:1px solid #ffffff10;padding:11px 4px;font-size:13px;display:flex;gap:12px}
-.list button span{color:var(--muted);font-variant-numeric:tabular-nums}
+.list button span{flex:none;color:var(--muted);font-variant-numeric:tabular-nums;overflow-wrap:normal}
 .list button:hover{background:#ffffff08}
 .list button.on{color:var(--accent2);font-weight:600}
 .list .empty{padding:22px 4px;color:var(--muted);font-size:13px;line-height:1.7}
@@ -223,7 +223,9 @@ body.yt .ownpl{display:flex}
 .devnote button{background:none;border:0;padding:0;color:var(--accent2);font:600 12px 'Outfit',sans-serif;cursor:pointer}
 .suggestbtn{flex:none;margin-top:8px;padding:9px;border-radius:10px;border:1px solid var(--line);background:#ffffff0a;font:600 13px 'Outfit',sans-serif}
 .suggestbtn:hover{background:#ffffff16}
-.suggestbtn[hidden]{display:none}
+.suggestbtn[hidden],.herosuggest[hidden]{display:none}
+.herosuggest{margin-top:22px;padding:11px 20px;border-radius:99px;border:1px solid var(--accent2);background:color-mix(in srgb,var(--accent2) 12%,transparent);font:600 14px 'Outfit',sans-serif;transition:background .2s,transform .2s}
+.herosuggest:hover{background:color-mix(in srgb,var(--accent2) 22%,transparent);transform:translateY(-2px)}
 .suggest{width:min(420px,calc(100% - 32px));padding:22px;border:1px solid var(--line);border-radius:18px;background:var(--deep);color:var(--cream);box-shadow:0 30px 80px #000a}
 .suggest::backdrop{background:#0009;backdrop-filter:blur(4px)}
 .suggest h2{font:500 24px/1.1 'Fraunces',Georgia,serif;margin:0 0 6px}

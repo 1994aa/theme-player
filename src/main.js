@@ -435,6 +435,7 @@ function loadYTTheme(autoplay) {
   else if (/^[\w-]{11}$/.test(source)) { ytSongs[theme] = [source]; fetchTitles([source]); }
   makePlayer(source, autoplay);
   renderList();
+  renderNow();
 }
 
 // Song titles for the list, a few requests at a time
@@ -535,10 +536,10 @@ $('ownForm').onsubmit = async e => {
 };
 
 // ---------- song suggestions (sent to the Google Form in suggest.js) ----------
-$('suggestBtn').hidden = !SUGGEST_FORM.action;
+$('suggestBtn').hidden = $('heroSuggest').hidden = !SUGGEST_FORM.action;
 $('suggestThemeRow').hidden = !SUGGEST_FORM.theme;
 $('suggestTheme').innerHTML = Object.entries(THEMES).map(([key, t]) => `<option value="${key}">${t.emoji} ${t.name}</option>`).join('');
-$('suggestBtn').onclick = () => {
+$('suggestBtn').onclick = $('heroSuggest').onclick = () => {
   $('suggestForm').reset();
   $('suggestMsg').textContent = '';
   if (theme) $('suggestTheme').value = theme;
