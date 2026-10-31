@@ -7,6 +7,13 @@ body[data-theme="saloon"]{--accent:#ff3d8b;--accent2:#3b9bff;--ink:#170c2a;--sky
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;background:var(--ink);color:var(--cream);font-family:'Outfit',system-ui,sans-serif;-webkit-font-smoothing:antialiased;transition:background .6s;overflow-x:hidden}
 body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(ellipse at 80% 0%,color-mix(in srgb,var(--accent) 30%,transparent),transparent 55%),radial-gradient(ellipse at 0% 100%,color-mix(in srgb,var(--accent2) 18%,transparent),transparent 50%)}
+/* Wallpaper: slowly drifting colour glows under a faint jaali (lattice) pattern */
+body:after{content:"";position:fixed;inset:-25%;z-index:-1;pointer-events:none;background:radial-gradient(circle at 28% 32%,color-mix(in srgb,var(--accent) 24%,transparent),transparent 28%),radial-gradient(circle at 72% 58%,color-mix(in srgb,var(--accent2) 15%,transparent),transparent 30%),radial-gradient(circle at 45% 85%,#6a3cff26,transparent 32%);animation:aurora 28s ease-in-out infinite alternate}
+@keyframes aurora{to{transform:translate(7%,-5%) rotate(10deg) scale(1.08)}}
+.shell:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56'%3E%3Cg fill='none' stroke='%23fff' stroke-opacity='.09'%3E%3Cpath d='M0 28 Q14 14 28 28 T56 28 M28 0 Q14 14 28 28 T28 56 M0 28 Q14 42 28 28 T56 28 M28 0 Q42 14 28 28 T28 56'/%3E%3Ccircle cx='28' cy='28' r='3'/%3E%3C/g%3E%3Ccircle cx='0' cy='0' r='1.6' fill='%23ffc23d' fill-opacity='.18'/%3E%3C/svg%3E");background-size:56px}
+/* A filmic finish on the scenes and card pictures: warm light and a vignette */
+.thumb{position:relative}
+.scene:before,.thumb:before{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse at 50% 40%,#ffd9a014,transparent 60%),radial-gradient(ellipse at 50% 50%,transparent 58%,#0a041466 100%)}
 a{color:inherit;text-decoration:none}
 button{font:inherit;color:inherit;cursor:pointer}
 a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid var(--accent2);outline-offset:3px}
@@ -154,6 +161,10 @@ body.playing .scene *{animation-play-state:running}
 /* Portrait screens: the scene sits above a bottom-sheet player, a little cropped at the sides */
 @media(max-aspect-ratio:1/1){
 .scene svg{inset:auto;left:50%;top:76px;width:160%;height:auto;aspect-ratio:16/9;transform:translateX(-50%)}
+/* below the scene each theme carries on its own floor (the saloon tiles line up with the drawing's) */
+body[data-theme="kitchen"] .scene{background:linear-gradient(var(--sky) 50%,transparent 50%),repeating-linear-gradient(#0000 0 44px,#00000030 44px 46px),linear-gradient(#5e331c,#3e2214)}
+body[data-theme="pahad"] .scene{background:linear-gradient(var(--sky) 50%,transparent 50%),linear-gradient(#3f8f45,#2f6f38)}
+body[data-theme="saloon"] .scene{background:linear-gradient(var(--sky) 50%,transparent 50%),repeating-conic-gradient(#f4eee6 0 25%,#2a2433 0 50%) -30vw 76px/12vw 12vw}
 .player{left:0;right:0;bottom:0;width:auto;max-height:52vh;border-radius:22px 22px 0 0;border-bottom:0;padding:18px 18px calc(14px + env(safe-area-inset-bottom))}
 .player h2{font-size:22px;margin:4px 0 10px}
 .now strong{margin-bottom:8px}
@@ -191,8 +202,10 @@ body.stage-on .top{padding:14px}
 #stage .progress{margin-top:8px}
 #stage .listbox{position:absolute;left:0;right:0;bottom:calc(100% + 10px);display:flex;flex-direction:column;max-height:min(58vh,500px);padding:10px 14px 4px;border:1px solid var(--line);border-radius:16px;background:color-mix(in srgb,var(--deep) 92%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px #0008}
 #stage .listbox[hidden]{display:none}
+#stage .listbox>:not(.list){flex:none}
 #stage .listbox .list{min-height:0;flex:1;border-top:0}
 .scope{display:flex;gap:6px;margin-bottom:8px}
+.scope[hidden]{display:none}
 .scope button{flex:1;border:1px solid var(--line);border-radius:99px;padding:7px 8px;font-size:12px;background:none}
 .scope button.on{background:var(--cream);color:var(--ink);font-weight:600;border-color:var(--cream)}
 .ownpl{display:none;gap:6px;margin-bottom:8px}
@@ -200,14 +213,31 @@ body.yt .ownpl{display:flex}
 .ownpl input{flex:1;min-width:0;padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:#ffffff10;color:inherit;font:inherit;font-size:13px;outline:none}
 .ownpl input:focus{border-color:var(--accent2)}
 .ownpl button{flex:none;padding:0 14px;border-radius:10px;border:0;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font:600 13px 'Outfit',sans-serif}
-.devbox{display:none;gap:6px;margin-bottom:8px}
-body:not(.yt) .devbox{display:flex}
+/* Picking songs from the visitor's device is offered in both YouTube and local mode */
+.devbox{display:flex;gap:6px;margin-bottom:8px}
 .devbox button{flex:1;padding:9px 10px;border-radius:10px;border:1px dashed var(--accent2);background:#ffffff0a;font:600 13px 'Outfit',sans-serif}
 .devbox button:hover{background:#ffffff16}
 .devbox button[hidden]{display:none}
 .devnote{margin:0 0 8px;font-size:12px;color:var(--muted)}
 .devnote:empty,body.yt .devnote{display:none}
 .devnote button{background:none;border:0;padding:0;color:var(--accent2);font:600 12px 'Outfit',sans-serif;cursor:pointer}
+.suggestbtn{flex:none;margin-top:8px;padding:9px;border-radius:10px;border:1px solid var(--line);background:#ffffff0a;font:600 13px 'Outfit',sans-serif}
+.suggestbtn:hover{background:#ffffff16}
+.suggestbtn[hidden]{display:none}
+.suggest{width:min(420px,calc(100% - 32px));padding:22px;border:1px solid var(--line);border-radius:18px;background:var(--deep);color:var(--cream);box-shadow:0 30px 80px #000a}
+.suggest::backdrop{background:#0009;backdrop-filter:blur(4px)}
+.suggest h2{font:500 24px/1.1 'Fraunces',Georgia,serif;margin:0 0 6px}
+.suggest .hint{margin:0 0 14px;color:var(--muted);font-size:13px;line-height:1.5}
+.suggest label[hidden]{display:none}
+.suggest label{display:block;margin-bottom:10px;font-size:12px;font-weight:600;color:var(--muted)}
+.suggest input,.suggest select{display:block;width:100%;margin-top:5px;padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:#ffffff10;color:var(--cream);font:400 14px 'Outfit',sans-serif;outline:none}
+.suggest select option{background:var(--deep)}
+.suggest input:focus,.suggest select:focus{border-color:var(--accent2)}
+.suggest .msg{min-height:18px;margin:4px 0 10px;font-size:13px;color:var(--accent2)}
+.suggest .row{display:flex;gap:8px;justify-content:flex-end}
+.suggest .row button{padding:9px 16px;border-radius:10px;border:1px solid var(--line);background:none;font:600 13px 'Outfit',sans-serif}
+.suggest .row .send{border:0;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.suggest .row .send:disabled{opacity:.6}
 .ownnote{margin:0 0 8px;font-size:12px;color:var(--muted)}
 .ownnote:empty,body:not(.yt) .ownnote{display:none}
 .ownnote button{background:none;border:0;padding:0;color:var(--accent2);font:600 12px 'Outfit',sans-serif;cursor:pointer}
@@ -220,14 +250,48 @@ body:not(.yt) .devbox{display:flex}
 body.yt .ytbox{display:block;position:absolute;right:0;bottom:calc(100% + 10px);width:200px;height:200px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#000;box-shadow:0 14px 40px #0008}
 body.yt .ytbox iframe{width:100%;height:100%;display:block}
 body.yt .ytbox{transition:opacity .3s}
-body.yt:not(.ytplaying) .ytbox{visibility:hidden;opacity:0;pointer-events:none}
+body.yt:not(.ytplaying):not(.yttap) .ytbox{visibility:hidden;opacity:0;pointer-events:none}
 body.yt #stage .listbox{right:210px}
-@media(max-width:700px){body.yt #stage .listbox{right:0;bottom:calc(100% + 220px)}body.yt .ytbox{width:200px;height:200px}}
+.yttip{display:none}
+body.yt.yttap .yttip{display:block;position:absolute;right:0;bottom:calc(100% + 218px);width:200px;margin:0;padding:7px 10px;border-radius:10px;background:var(--accent2);color:#111;font:600 12px/1.3 'Outfit',sans-serif;text-align:center;pointer-events:none;box-shadow:0 8px 24px #0006}
+/* Phones: the list sits right above the bar, and only makes room for the video box while it shows */
+@media(max-width:700px){
+body.yt #stage .listbox{right:0;bottom:calc(100% + 10px);max-height:calc(100dvh - 300px)}
+body.yt.ytplaying #stage .listbox,body.yt.yttap #stage .listbox{bottom:calc(100% + 220px);max-height:max(220px,calc(100dvh - 520px))}
+#stage .listbox{max-height:calc(100dvh - 300px)}
+.devbox button{white-space:nowrap;font-size:12px;padding:8px 6px}
+/* the open song list gets the whole screen height, so the header steps aside */
+body.stage-on.listopen .top{opacity:0;pointer-events:none}
+body.stage-on .top{transition:opacity .2s}
+.ownpl input,#search{padding:8px 10px}
+}
 @media(max-width:700px){
 #stage .player{bottom:10px;padding:10px 12px calc(8px + env(safe-area-inset-bottom))}
 #stage .bar{grid-template-columns:1fr auto;gap:8px 10px}
 #stage .controls{grid-column:1/-1;grid-row:2;justify-content:center}
 #stage .eq,#stage .side input{display:none}
 #stage .controls button.big{width:50px;height:50px}
+}
+/* Tablets: tab labels would wrap onto two lines, so show only the icons */
+@media(max-width:900px){
+#tabs a{white-space:nowrap}
+#tabs a span{display:none}
+#tabs a{padding:9px 14px}
+}
+/* Phones held sideways: a slimmer player bar, and the scene sits above it instead of behind it */
+@media(max-height:500px) and (orientation:landscape){
+body.stage-on .top{padding-top:10px;padding-bottom:10px}
+.scene{bottom:84px}
+#stage .player{bottom:8px;padding:8px 14px 6px}
+#stage .meta .eyebrow,#stage .meta small{display:none}
+#stage .meta strong{margin:0}
+#stage .controls button{width:36px;height:36px;font-size:13px}
+#stage .controls button.big{width:44px;height:44px;font-size:17px}
+#stage .eq{height:22px}
+#listBtn,#srcBtn{height:36px}
+#listBtn{width:36px}
+#stage .progress{margin-top:4px}
+/* beats the portrait-phone list rules; the list may cover the video box while it's open */
+body.yt #stage .listbox,body.yt.ytplaying #stage .listbox,#stage .listbox{bottom:calc(100% + 8px);max-height:calc(100dvh - 150px)}
 }
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

@@ -27,6 +27,7 @@
     <section id="stage" hidden>
       <div class="scene" id="scene"></div>
       <aside class="player">
+        <p class="yttip">👆 Video pe ek baar tap karo, gaana shuru ho jayega</p>
         <div class="ytbox" id="ytBox"><div id="ytPlayer"></div></div>
         <div class="listbox" id="listBox" hidden>
           <form class="ownpl" id="ownForm">
@@ -44,6 +45,7 @@
           <div class="scope" id="scope"></div>
           <input type="search" id="search" placeholder="🔍 Gaana, singer ya film dhoondo…" autocomplete="off" aria-label="Gaana dhoondo">
           <ol class="list" id="list"></ol>
+          <button type="button" class="suggestbtn" id="suggestBtn" hidden>💡 Koi gaana suggest karo</button>
         </div>
         <div class="bar">
           <div class="meta">
@@ -69,6 +71,19 @@
     </section>
   </main>
 </div>
+<dialog class="suggest" id="suggestBox" aria-labelledby="suggestTitle">
+  <form id="suggestForm" method="dialog">
+    <h2 id="suggestTitle">Gaana suggest karo</h2>
+    <p class="hint">Aapka pasandida gaana batao, hum list mein jodne ki koshish karenge.</p>
+    <label>Gaane ka naam *<input name="song" required maxlength="120" autocomplete="off" placeholder="jaise: Kesariya"></label>
+    <label>Singer ya film<input name="artist" maxlength="120" autocomplete="off" placeholder="jaise: Arijit Singh, Brahmastra"></label>
+    <label id="suggestThemeRow">Kis theme ke liye?<select name="theme" id="suggestTheme"></select></label>
+    <label>YouTube link *<input name="link" type="url" required maxlength="300" autocomplete="off" placeholder="https://youtu.be/…"></label>
+    <label>Aapka naam *<input name="name" required maxlength="60" autocomplete="off"></label>
+    <p class="msg" id="suggestMsg" role="status"></p>
+    <div class="row"><button type="button" value="cancel" id="suggestClose">Band karo</button><button type="submit" class="send">Bhejo</button></div>
+  </form>
+</dialog>
 <script type="module" src="/src/main.js"></script>
 </body>
 </html>

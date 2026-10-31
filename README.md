@@ -1,7 +1,7 @@
 # theme-player (dhun.)
 
 A music player where every theme is its own animated scene that moves with the beat:
-Truck (driver's seat on the highway), Kitchen, Taaron ki Raat, Pahadon ki Chai and Saloon Shop.
+Horn OK Please (truck, driver's seat on the highway), Rasoi ki Dhun (kitchen), Taaron ki Raat, Pahadon ki Chai and Kainchi ki Taal (saloon).
 Built with Vite; the scenes are SVG + CSS driven by a Web Audio analyser.
 
 ## Run

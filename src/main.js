@@ -3,6 +3,7 @@ import { THEMES } from './scenes.js';
 import { YT_PLAYLISTS } from './playlists.js';
 // Official videos matched to the local library by tools/find-youtube.mjs: { theme: [{ id, title }] }
 import YT_SONGS from './yt-songs.json';
+import { SUGGEST_FORM } from './suggest.js';
 
 const $ = id => document.getElementById(id);
 const audio = new Audio();
@@ -124,10 +125,26 @@ function renderNow() {
   $('play').textContent = isPaused() ? '▶' : '⏸';
   document.body.classList.toggle('playing', !isPaused());
   document.querySelectorAll('#list button[data-i]').forEach(b => b.classList.toggle('on', l[+b.dataset.i] === cur));
+  // Song name and controls on the phone's lock screen
+  if ('mediaSession' in navigator && cur) {
+    navigator.mediaSession.metadata = new MediaMetadata({ title: name(cur), artist: `dhun. · ${THEMES[theme]?.name || ''}` });
+    navigator.mediaSession.playbackState = isPaused() ? 'paused' : 'playing';
+  }
+}
+if ('mediaSession' in navigator) {
+  const on = (action, fn) => { try { navigator.mediaSession.setActionHandler(action, fn); } catch {} };
+  on('play', () => isPaused() && toggle());
+  on('pause', () => !isPaused() && toggle());
+  on('nexttrack', () => step(1));
+  on('previoustrack', () => step(-1));
 }
 
+// iPhones silence audio routed through Web Audio once the screen locks, so there the songs play
+// straight from the <audio> element and the scene follows the steady pulse instead.
+const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+
 function ensureGraph() {
-  if (ctx) return;
+  if (ctx || IOS) return;
   ctx = new AudioContext();
   analyser = ctx.createAnalyser();
   analyser.fftSize = 64;
@@ -140,13 +157,15 @@ function play(i) {
   const l = list();
   if (!l.length) return;
   if (mode === 'yt') {
-    if (!ytReady) return;
+    if (!ytReady) { ytWantPlay = true; return; }
+    askedToPlay();
+    if (ytQueue) { ytErrors = 0; yt.loadVideoById(ytQueue[(i + ytQueue.length) % ytQueue.length]); return; }
     // a single jukebox video has no playlist to index into
     if ((yt.getPlaylist() || []).length) yt.playVideoAt((i + l.length) % l.length); else yt.playVideo();
     return;
   }
   ensureGraph();
-  ctx.resume();
+  ctx?.resume();
   idx = (i + l.length) % l.length;
   current = l[idx];
   audio.src = deviceSongs.get(current) || `/song?f=${encodeURIComponent(current)}`;
@@ -154,7 +173,15 @@ function play(i) {
   renderNow();
 }
 function step(dir) {
-  if (mode === 'yt') { if (ytReady) (dir > 0 ? yt.nextVideo() : yt.previousVideo()); return; }
+  if (mode === 'yt') {
+    if (!ytReady) return;
+    if (!ytQueue) return dir > 0 ? yt.nextVideo() : yt.previousVideo();
+    const n = ytQueue.length, at = ytQueue.indexOf(ytCurrent);
+    let next = at + dir;
+    if (shuffle && n > 1) do next = Math.floor(Math.random() * n); while (next === at);
+    yt.loadVideoById(ytQueue[(next + n) % n]);
+    return;
+  }
   const l = list();
   if (l.indexOf(current) >= 0) idx = l.indexOf(current);
   if (shuffle && l.length > 1) {
@@ -165,12 +192,12 @@ function step(dir) {
 }
 function toggle() {
   if (mode === 'yt') {
-    if (!ytReady) return;
-    if (ytState === 1) yt.pauseVideo(); else if (ytCurrent) yt.playVideo(); else play(0);
+    if (!ytReady) { ytWantPlay = !ytWantPlay; return; }
+    if (ytState === 1) yt.pauseVideo(); else if (ytCurrent) { askedToPlay(); yt.playVideo(); } else play(0);
     return;
   }
   if (!audio.src) return play(idx);
-  if (audio.paused) { ctx.resume(); audio.play(); } else audio.pause();
+  if (audio.paused) { ctx?.resume(); audio.play(); } else audio.pause();
 }
 
 $('play').onclick = toggle;
@@ -217,6 +244,7 @@ $('search').onkeydown = e => {
 // The song list stays hidden until the list button (or the song title) is clicked
 function setListOpen(open) {
   $('listBox').hidden = !open;
+  document.body.classList.toggle('listopen', open);
   $('listBtn').classList.toggle('on', open);
   $('listBtn').setAttribute('aria-expanded', open);
   if (!open) return;
@@ -238,7 +266,7 @@ audio.addEventListener('timeupdate', () => {
 });
 addEventListener('keydown', e => {
   if (e.code === 'Escape') setListOpen(false);
-  if (!theme || e.target.tagName === 'INPUT') return;
+  if (!theme || e.target.closest?.('input, select, dialog')) return;
   if (e.key === '/') { e.preventDefault(); setListOpen(true); $('search').focus(); }
   if (e.code === 'Space') { e.preventDefault(); toggle(); }
   if (e.code === 'ArrowRight') step(1);
@@ -259,8 +287,8 @@ function frame() {
       b.setAttribute('height', h);
       b.setAttribute('y', 38 - h);
     });
-  } else if (mode === 'yt' && ytState === 1) {
-    // A YouTube player's audio can't be analysed, so the scene follows a steady 120 BPM pulse
+  } else if (mode === 'yt' ? ytState === 1 : !audio.paused) {
+    // A YouTube player's audio (or an iPhone's) can't be analysed, so the scene follows a steady 120 BPM pulse
     const t = performance.now() / 1000;
     beat = Math.max((1 - (t * 2) % 1) ** 3, beat * 0.9);
     for (let i = 0; i < eqBars.length; i++) eqBars[i].style.height = `${8 + (0.5 + 0.5 * Math.sin(t * 5 + i * 1.7)) * (40 + beat * 50)}%`;
@@ -289,7 +317,20 @@ fetch('/songs.json')
   });
 
 // ---------- YouTube mode (live site) ----------
-let apiReady = false;
+let apiReady = false, ytWantPlay = false, tapTimer;
+// A list of video ids is played one video at a time from ytQueue: handed to the player as a
+// `playlist`, phones only showed "Watch on YouTube" instead of playing.
+let ytQueue = null, ytErrors = 0;
+// Phone browsers often won't let a page start a YouTube video until the video itself has been
+// tapped, so if nothing plays soon after asking, the video box shows up with a hint to tap it.
+function askedToPlay() {
+  clearTimeout(tapTimer);
+  tapTimer = setTimeout(() => {
+    if (mode !== 'yt' || ytState === 1 || ytState === 3) return;
+    document.body.classList.add('yttap');
+    setListOpen(false);
+  }, 2000);
+}
 function startYT() {
   document.body.classList.add('yt');
   window.onYouTubeIframeAPIReady = () => { apiReady = true; if (theme) loadYTTheme(false); };
@@ -309,8 +350,11 @@ function onYTState(e) {
   ytState = e.data;
   // The video box only shows while something is playing or loading (YouTube needs it visible then)
   document.body.classList.toggle('ytplaying', e.data === 1 || e.data === 3);
+  if (e.data === 1 || e.data === 3) document.body.classList.remove('yttap');
   // A single jukebox video loops when it ends
+  if (e.data === 0 && ytQueue) return step(1);
   if (e.data === 0 && (ytSongs[ytTheme] || []).length === 1) yt.playVideo();
+  if (e.data === 1) ytErrors = 0;
   const ids = yt.getPlaylist() || [];
   if (ytTheme && ids.length && ytSongs[ytTheme] !== ids) { ytSongs[ytTheme] = ids; fetchTitles(ids); if (mode === 'yt') renderList(); }
   const id = yt.getVideoData()?.video_id;
@@ -325,12 +369,13 @@ function makePlayer(source, autoplay) {
   if (yt) yt.destroy();
   ytReady = false;
   ytState = -1;
-  document.body.classList.remove('ytplaying');
+  clearTimeout(tapTimer);
+  document.body.classList.remove('ytplaying', 'yttap');
   $('ytBox').innerHTML = '<div id="ytPlayer"></div>';
   const vars = { playsinline: 1, rel: 0 };
   let videoId;
-  // the first id also has to be in `playlist`, or the player skips it
-  if (Array.isArray(source)) { videoId = source[0]; vars.playlist = source.join(','); }
+  ytQueue = Array.isArray(source) ? source : null;
+  if (ytQueue) videoId = source[0];
   else if (/^[\w-]{11}$/.test(source)) videoId = source;
   else { vars.listType = 'playlist'; vars.list = source; }
   yt = new YT.Player('ytPlayer', {
@@ -342,11 +387,26 @@ function makePlayer(source, autoplay) {
         ytReady = true;
         yt.setVolume($('vol').value * 100);
         yt.setShuffle(shuffle);
-        if (autoplay) yt.playVideo();
+        if (autoplay || ytWantPlay) { askedToPlay(); yt.playVideo(); }
+        ytWantPlay = false;
       },
       onStateChange: onYTState,
+      onError: onYTError,
     },
   });
+}
+
+// Some labels block their songs from playing on other sites, at times only on phones (YouTube's
+// search doesn't tell), so a blocked song is skipped, and after 3 in a row the theme falls back
+// to its playlist from playlists.js for the rest of the visit.
+const ytBlocked = new Set();
+function onYTError(e) {
+  console.warn('YouTube error', e.data, ytCurrent);
+  if (!ytQueue) return;
+  if (++ytErrors < 3) return step(1);
+  ytBlocked.add(ytTheme);
+  ytTheme = null;
+  if (YT_PLAYLISTS[theme]) loadYTTheme(true);
 }
 
 function loadYTTheme(autoplay) {
@@ -357,7 +417,7 @@ function loadYTTheme(autoplay) {
   // The visitor's own playlist wins, then videos matched to the local library (at most 200),
   // then the theme's playlist from playlists.js
   const own = ownLists[theme];
-  let matched = own ? [] : (YT_SONGS[theme] || []).map(s => s.id);
+  let matched = own || ytBlocked.has(theme) ? [] : (YT_SONGS[theme] || []).map(s => s.id);
   if (matched.length > 200) matched = matched.sort(() => Math.random() - 0.5).slice(0, 200);
   const source = matched.length ? matched : own || YT_PLAYLISTS[theme];
   if (!source) {
@@ -403,7 +463,7 @@ function setMode(next) {
   showAll = false;
   if (mode === 'yt') {
     if (ytTheme !== theme) loadYTTheme(wasPlaying);
-    else if (wasPlaying && ytReady) yt.playVideo();
+    else if (wasPlaying && ytReady) { askedToPlay(); yt.playVideo(); }
   } else if (wasPlaying && list().length) {
     if (list().includes(current)) toggle(); else play(Math.floor(Math.random() * list().length));
   }
@@ -472,4 +532,37 @@ $('ownForm').onsubmit = async e => {
   saveOwn();
   $('ownUrl').value = '';
   reloadYT();
+};
+
+// ---------- song suggestions (sent to the Google Form in suggest.js) ----------
+$('suggestBtn').hidden = !SUGGEST_FORM.action;
+$('suggestThemeRow').hidden = !SUGGEST_FORM.theme;
+$('suggestTheme').innerHTML = Object.entries(THEMES).map(([key, t]) => `<option value="${key}">${t.emoji} ${t.name}</option>`).join('');
+$('suggestBtn').onclick = () => {
+  $('suggestForm').reset();
+  $('suggestMsg').textContent = '';
+  if (theme) $('suggestTheme').value = theme;
+  $('suggestBox').showModal();
+};
+$('suggestClose').onclick = () => $('suggestBox').close();
+$('suggestForm').onsubmit = async e => {
+  e.preventDefault();
+  const data = new FormData(e.target), body = new URLSearchParams();
+  for (const field of ['song', 'artist', 'theme', 'link', 'name']) {
+    let value = (data.get(field) || '').trim();
+    if (field === 'theme') value = THEMES[value]?.name || value;
+    if (value && SUGGEST_FORM[field]) body.append(`entry.${SUGGEST_FORM[field].replace(/^entry\./, '')}`, value);
+  }
+  const send = e.target.querySelector('.send');
+  send.disabled = true;
+  try {
+    // Google Forms doesn't allow reading the reply from another site, so a sent request counts as done
+    await fetch(SUGGEST_FORM.action, { method: 'POST', mode: 'no-cors', body });
+    $('suggestMsg').textContent = '🙏 Shukriya! Aapka gaana humein mil gaya.';
+    setTimeout(() => $('suggestBox').close(), 1600);
+  } catch {
+    $('suggestMsg').textContent = 'Bhej nahi paaye, internet check karke dobara koshish karo.';
+  } finally {
+    send.disabled = false;
+  }
 };
