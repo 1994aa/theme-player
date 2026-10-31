@@ -184,6 +184,9 @@ body.stage-on .top{padding:14px}
 #stage .side input{width:84px;flex:none}
 #listBtn{flex:none;width:42px;height:42px;border-radius:12px;border:1px solid var(--line);background:#ffffff0d;font-size:17px}
 #listBtn:hover{border-color:var(--accent2)}
+#srcBtn{flex:none;height:42px;padding:0 12px;border-radius:12px;border:1px solid var(--line);background:#ffffff0d;font-size:12px;font-weight:600;white-space:nowrap}
+#srcBtn:hover{border-color:var(--accent2)}
+#srcBtn[hidden]{display:none}
 #listBtn.on{background:var(--accent);border-color:var(--accent);color:#fff}
 #stage .progress{margin-top:8px}
 #stage .listbox{position:absolute;left:0;right:0;bottom:calc(100% + 10px);display:flex;flex-direction:column;max-height:min(58vh,500px);padding:10px 14px 4px;border:1px solid var(--line);border-radius:16px;background:color-mix(in srgb,var(--deep) 92%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px #0008}

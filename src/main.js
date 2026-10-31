@@ -1,6 +1,8 @@
 import './style.css';
 import { THEMES } from './scenes.js';
 import { YT_PLAYLISTS } from './playlists.js';
+// Official videos matched to the local library by tools/find-youtube.mjs: { theme: [{ id, title }] }
+import YT_SONGS from './yt-songs.json';
 
 const $ = id => document.getElementById(id);
 const audio = new Audio();
@@ -12,11 +14,13 @@ let showAll = false, current = null;
 let theme = null, idx = 0, shuffle = false;
 let ctx, analyser, bins;
 
-// 'local' plays songs/ through the dev server; 'yt' (the live site) plays each theme's
-// YouTube playlist from playlists.js. In 'yt' the list holds video ids and titles come from oEmbed.
-let mode = 'local';
-let yt, ytReady = false, ytState = -1, ytTheme = null;
-const titles = {};
+// 'yt' plays each theme's YouTube playlist from playlists.js and is the default (and the only
+// source on the live site). 'local' plays songs/ through the dev server; when those exist, a
+// button switches between the two. In 'yt' the list holds video ids and titles come from oEmbed.
+let mode = 'yt', hasLocal = false;
+let yt, ytReady = false, ytState = -1, ytTheme = null, ytCurrent = null;
+const ytSongs = {};
+const titles = Object.fromEntries(Object.values(YT_SONGS).flat().map(s => [s.id, s.title]));
 const isPaused = () => (mode === 'yt' ? ytState !== 1 : audio.paused);
 const name = f => (mode === 'yt' ? titles[f] || '…' : pretty(f));
 
@@ -28,14 +32,15 @@ const pretty = f => f
   .replace(/\[[^\]]*\]/g, '')
   .replace(/\(?-?\s*\d{2,3}\s?kbps\)?/gi, '')
   .replace(/\s*-\s*copy\b|\(\d+\)/gi, '')
-  .replace(/\((?:[^)]*\.(?:com|in|se)|wapking|djhungama)[^)]*\)?/gi, '')
+  .replace(/\((?:[^)]*\.(?:com|in|se|pk|fm|cc|net|info|co|me|mobi|at)|wapking|djhungama)[^)]*\)?/gi, '')
   .replace(/\s*-\s*[\w.]*downloadming[\w.]*/gi, '')
   .replace(/^\s*\d+\s*[.\-]?\s*(?:-\s*)?/, '')
   .replace(/\s+/g, ' ')
   .replace(/[\s-]+$/, '')
   .trim();
 const time = s => isFinite(s) ? `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}` : '0:00';
-const list = () => (showAll ? songs.all : songs[theme]) || [];
+const list = () => (mode === 'yt' ? ytSongs[theme] : showAll ? songs.all : songs[theme]) || [];
+const playing = () => (mode === 'yt' ? ytCurrent : current);
 
 // ---------- theme picker ----------
 $('cards').innerHTML = Object.entries(THEMES).map(([key, t]) => `
@@ -92,7 +97,7 @@ function renderList() {
   });
   const esc = s => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
   $('list').innerHTML = hits.length
-    ? hits.map(([f, i]) => `<li><button data-i="${i}" class="${f === current ? 'on' : ''}"><span>${String(i + 1).padStart(2, '0')}</span>${esc(name(f))}</button></li>`).join('')
+    ? hits.map(([f, i]) => `<li><button data-i="${i}" class="${f === playing() ? 'on' : ''}"><span>${String(i + 1).padStart(2, '0')}</span>${esc(name(f))}</button></li>`).join('')
     : words.length
       ? `<li class="empty">"${esc($('search').value.trim())}" se koi gaana nahi mila.${showAll ? '' : '<br><button class="link" data-scope="all">Sab gaane mein dhoondo →</button>'}</li>`
       : mode === 'yt'
@@ -101,12 +106,13 @@ function renderList() {
 }
 function renderNow() {
   const l = list();
-  const pos = l.indexOf(current);
+  const cur = playing(), pos = l.indexOf(cur);
   $('count').textContent = l.length ? `${pos < 0 ? '–' : pos + 1} / ${l.length}` : '0 gaane';
-  $('title').textContent = current ? name(current) : l.length ? '▶ dabao aur shuru karo' : 'Koi gaana nahi';
+  $('title').textContent = cur ? name(cur) : l.length ? '▶ dabao aur shuru karo' : 'Koi gaana nahi';
+  $('srcBtn').textContent = mode === 'yt' ? '▶ YouTube' : '📁 Local';
   $('play').textContent = isPaused() ? '▶' : '⏸';
   document.body.classList.toggle('playing', !isPaused());
-  document.querySelectorAll('#list button[data-i]').forEach(b => b.classList.toggle('on', l[+b.dataset.i] === current));
+  document.querySelectorAll('#list button[data-i]').forEach(b => b.classList.toggle('on', l[+b.dataset.i] === cur));
 }
 
 function ensureGraph() {
@@ -144,7 +150,7 @@ function step(dir) {
 function toggle() {
   if (mode === 'yt') {
     if (!ytReady) return;
-    if (ytState === 1) yt.pauseVideo(); else if (current) yt.playVideo(); else play(0);
+    if (ytState === 1) yt.pauseVideo(); else if (ytCurrent) yt.playVideo(); else play(0);
     return;
   }
   if (!audio.src) return play(idx);
@@ -203,6 +209,7 @@ audio.addEventListener('ended', () => step(1));
 audio.addEventListener('play', renderNow);
 audio.addEventListener('pause', renderNow);
 audio.addEventListener('timeupdate', () => {
+  if (mode !== 'local') return;
   $('cur').textContent = time(audio.currentTime);
   $('dur').textContent = time(audio.duration);
   if (audio.duration) $('seek').value = audio.currentTime / audio.duration * 1000;
@@ -253,14 +260,15 @@ fetch('/songs.json')
   .then(data => {
     if (Array.isArray(data)) songs = { all: data, ...Object.fromEntries(Object.keys(THEMES).map(k => [k, data])) };
     else if (data && data.all) songs = data;
-    if (!songs.all.length) startYT();
+    hasLocal = songs.all.length > 0;
+    $('srcBtn').hidden = !hasLocal;
+    startYT();
     route();
     if (theme) { renderList(); renderNow(); }
   });
 
 // ---------- YouTube mode (live site) ----------
 function startYT() {
-  mode = 'yt';
   document.body.classList.add('yt');
   window.onYouTubeIframeAPIReady = () => {
     yt = new YT.Player('ytPlayer', {
@@ -271,12 +279,12 @@ function startYT() {
         onStateChange: e => {
           ytState = e.data;
           // A single jukebox video loops when it ends
-          if (e.data === 0 && (songs[ytTheme] || []).length === 1) yt.playVideo();
+          if (e.data === 0 && (ytSongs[ytTheme] || []).length === 1) yt.playVideo();
           const ids = yt.getPlaylist() || [];
-          if (ytTheme && ids.length && songs[ytTheme] !== ids) { songs[ytTheme] = ids; fetchTitles(ids); renderList(); }
+          if (ytTheme && ids.length && ytSongs[ytTheme] !== ids) { ytSongs[ytTheme] = ids; fetchTitles(ids); if (mode === 'yt') renderList(); }
           const id = yt.getVideoData()?.video_id;
-          if (id) { current = id; if (yt.getVideoData().title) titles[id] = yt.getVideoData().title; }
-          renderNow();
+          if (id) { ytCurrent = id; if (yt.getVideoData().title) titles[id] = yt.getVideoData().title; }
+          if (mode === 'yt') renderNow();
         },
       },
     });
@@ -285,7 +293,7 @@ function startYT() {
   tag.src = 'https://www.youtube.com/iframe_api';
   document.head.appendChild(tag);
   setInterval(() => {
-    if (!ytReady || ytState < 1) return;
+    if (mode !== 'yt' || !ytReady || ytState < 1) return;
     const t = yt.getCurrentTime(), d = yt.getDuration();
     $('cur').textContent = time(t);
     $('dur').textContent = time(d);
@@ -296,12 +304,22 @@ function startYT() {
 function loadYTTheme(autoplay) {
   if (!ytReady || ytTheme === theme) return;
   ytTheme = theme;
-  current = null;
+  ytCurrent = null;
+  // Prefer the videos matched to the local library; the player accepts at most 200 at a time
+  let matched = (YT_SONGS[theme] || []).map(s => s.id);
+  if (matched.length) {
+    if (matched.length > 200) matched = matched.sort(() => Math.random() - 0.5).slice(0, 200);
+    ytSongs[theme] = matched;
+    if (autoplay) yt.loadPlaylist(matched); else yt.cuePlaylist(matched);
+    yt.setShuffle(shuffle);
+    renderList();
+    return;
+  }
   const list = YT_PLAYLISTS[theme];
-  if (!list) { yt.stopVideo(); songs[theme] = []; renderList(); renderNow(); return; }
+  if (!list) { yt.stopVideo(); ytSongs[theme] = []; renderList(); renderNow(); return; }
   // A video ID is 11 characters; anything else is treated as a playlist ID
   if (/^[\w-]{11}$/.test(list)) {
-    songs[theme] = [list];
+    ytSongs[theme] = [list];
     fetchTitles([list]);
     if (autoplay) yt.loadVideoById(list); else yt.cueVideoById(list);
   } else {
@@ -320,10 +338,28 @@ async function fetchTitles(ids) {
         const r = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent('https://www.youtube.com/watch?v=' + id)}&format=json`);
         titles[id] = r.ok ? (await r.json()).title : 'Gaana';
       } catch { titles[id] = 'Gaana'; }
-      if (todo.length % 10 === 0) renderList();
+      if (todo.length % 10 === 0 && mode === 'yt') renderList();
     }
   };
   await Promise.all([1, 2, 3, 4, 5, 6].map(worker));
+  if (mode === 'yt') { renderList(); renderNow(); }
+}
+
+// ---------- switching between YouTube and local songs (only when local songs exist) ----------
+function setMode(next) {
+  if (next === mode || (next === 'local' && !hasLocal)) return;
+  const wasPlaying = !isPaused();
+  if (mode === 'yt' && ytReady) yt.pauseVideo(); else audio.pause();
+  mode = next;
+  document.body.classList.toggle('yt', mode === 'yt');
+  showAll = false;
+  if (mode === 'yt') {
+    if (ytTheme !== theme) loadYTTheme(wasPlaying);
+    else if (wasPlaying && ytReady) yt.playVideo();
+  } else if (wasPlaying && list().length) {
+    if (list().includes(current)) toggle(); else play(Math.floor(Math.random() * list().length));
+  }
   renderList();
   renderNow();
 }
+$('srcBtn').onclick = () => setMode(mode === 'yt' ? 'local' : 'yt');

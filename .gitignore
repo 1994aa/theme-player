@@ -6,3 +6,9 @@ dist/
 songs/*
 !songs/.gitkeep
 !songs/themes.json
+
+# Local secrets
+.env.local
+
+# Daily YouTube matching log
+tools/picks/daily.log

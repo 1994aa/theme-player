@@ -21,3 +21,14 @@ they never end up in `dist/` or on a deployed site.
 ## Keys
 
 `Space` play/pause · `←` `→` previous/next · `/` search · `Esc` close the song list
+
+## YouTube matches for the live site
+
+`tools/find-youtube.mjs` matches songs listed in `tools/picks/<theme>.txt` to official YouTube
+videos and writes `src/yt-songs.json`, which the site plays per theme. It needs a free YouTube Data
+API key in `.env.local` (`YT_API_KEY=...`, never committed) and can look up about 99 songs a day,
+continuing where it stopped. Run it once a day, by hand or from cron:
+
+```
+cd /var/www/theme-player && node tools/find-youtube.mjs kitchen pahad saloon truck night
+```
