@@ -196,6 +196,12 @@ body.stage-on .top{padding:14px}
 #search:focus{border-color:var(--accent2)}
 #search::placeholder{color:var(--muted)}
 .list .empty .link{width:auto;display:inline;border:0;padding:6px 0 0;color:var(--accent2);font-weight:600}
+/* The YouTube player (live site only) has to stay visible, at least 200x200 */
+.ytbox{display:none}
+body.yt .ytbox{display:block;position:absolute;right:0;bottom:calc(100% + 10px);width:200px;height:200px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#000;box-shadow:0 14px 40px #0008}
+body.yt .ytbox iframe{width:100%;height:100%;display:block}
+body.yt #stage .listbox{right:210px}
+@media(max-width:700px){body.yt #stage .listbox{right:0;bottom:calc(100% + 220px)}body.yt .ytbox{width:200px;height:200px}}
 @media(max-width:700px){
 #stage .player{bottom:10px;padding:10px 12px calc(8px + env(safe-area-inset-bottom))}
 #stage .bar{grid-template-columns:1fr auto;gap:8px 10px}
