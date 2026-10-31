@@ -4,7 +4,7 @@
 // Playlists and videos must be public or unlisted and allow embedding.
 export const YT_PLAYLISTS = {
   truck: 'PL9bw4S5ePsEGx_-Jpy_xrC6JqIRCNYDZ9', // Yo Yo Honey Singh (T-Series)
-  kitchen: 'PLQ899XACCzal8qV9py2dTgrPcCVg2-Lll', // Hindi Feel Good Songs
+  kitchen: 'RAslUOv9ID0', // Feel Good Hindi Songs (Sony Music India audio jukebox)
   night: 'cxBYCHSU4io', // Arijit Singh's Birthday Special: Ultimate Love Songs (T-Series jukebox)
   pahad: 'qw30l7o6_yk', // Soulful Sufi Songs of Rahat Fateh Ali Khan (T-Series jukebox)
   saloon: 'PLKlPS4_Jq7cvWvOZCKJzjtQHPFAEWn4nX', // 90's super hit Hindi songs: Udit, Alka, Kumar Sanu

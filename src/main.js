@@ -20,6 +20,11 @@ let ctx, analyser, bins;
 let mode = 'yt', hasLocal = false;
 let yt, ytReady = false, ytState = -1, ytTheme = null, ytCurrent = null;
 const ytSongs = {};
+
+// Visitors can play their own YouTube playlist (or video) in any theme; saved per theme in this browser
+let ownLists = {};
+try { ownLists = JSON.parse(localStorage.getItem('dhun-own-playlists')) || {}; } catch {}
+const saveOwn = () => { try { localStorage.setItem('dhun-own-playlists', JSON.stringify(ownLists)); } catch {} };
 const titles = Object.fromEntries(Object.values(YT_SONGS).flat().map(s => [s.id, s.title]));
 const isPaused = () => (mode === 'yt' ? ytState !== 1 : audio.paused);
 const name = f => (mode === 'yt' ? titles[f] || '…' : pretty(f));
@@ -128,7 +133,12 @@ function ensureGraph() {
 function play(i) {
   const l = list();
   if (!l.length) return;
-  if (mode === 'yt') { if (ytReady) yt.playVideoAt((i + l.length) % l.length); return; }
+  if (mode === 'yt') {
+    if (!ytReady) return;
+    // a single jukebox video has no playlist to index into
+    if ((yt.getPlaylist() || []).length) yt.playVideoAt((i + l.length) % l.length); else yt.playVideo();
+    return;
+  }
   ensureGraph();
   ctx.resume();
   idx = (i + l.length) % l.length;
@@ -183,6 +193,10 @@ $('listBox').onclick = e => {
     renderList();
     renderNow();
     $('list').querySelector('button.on[data-i]')?.scrollIntoView({ block: 'center' });
+  } else if (b.dataset.reset) {
+    delete ownLists[theme];
+    saveOwn();
+    reloadYT();
   } else if (b.dataset.i) play(+b.dataset.i);
 };
 $('search').oninput = renderList;
@@ -268,27 +282,10 @@ fetch('/songs.json')
   });
 
 // ---------- YouTube mode (live site) ----------
+let apiReady = false;
 function startYT() {
   document.body.classList.add('yt');
-  window.onYouTubeIframeAPIReady = () => {
-    yt = new YT.Player('ytPlayer', {
-      width: 200, height: 200,
-      playerVars: { playsinline: 1, rel: 0 },
-      events: {
-        onReady: () => { ytReady = true; yt.setVolume($('vol').value * 100); if (theme) loadYTTheme(false); },
-        onStateChange: e => {
-          ytState = e.data;
-          // A single jukebox video loops when it ends
-          if (e.data === 0 && (ytSongs[ytTheme] || []).length === 1) yt.playVideo();
-          const ids = yt.getPlaylist() || [];
-          if (ytTheme && ids.length && ytSongs[ytTheme] !== ids) { ytSongs[ytTheme] = ids; fetchTitles(ids); if (mode === 'yt') renderList(); }
-          const id = yt.getVideoData()?.video_id;
-          if (id) { ytCurrent = id; if (yt.getVideoData().title) titles[id] = yt.getVideoData().title; }
-          if (mode === 'yt') renderNow();
-        },
-      },
-    });
-  };
+  window.onYouTubeIframeAPIReady = () => { apiReady = true; if (theme) loadYTTheme(false); };
   const tag = document.createElement('script');
   tag.src = 'https://www.youtube.com/iframe_api';
   document.head.appendChild(tag);
@@ -301,32 +298,76 @@ function startYT() {
   }, 500);
 }
 
+function onYTState(e) {
+  ytState = e.data;
+  // The video box only shows while something is playing or loading (YouTube needs it visible then)
+  document.body.classList.toggle('ytplaying', e.data === 1 || e.data === 3);
+  // A single jukebox video loops when it ends
+  if (e.data === 0 && (ytSongs[ytTheme] || []).length === 1) yt.playVideo();
+  const ids = yt.getPlaylist() || [];
+  if (ytTheme && ids.length && ytSongs[ytTheme] !== ids) { ytSongs[ytTheme] = ids; fetchTitles(ids); if (mode === 'yt') renderList(); }
+  const id = yt.getVideoData()?.video_id;
+  if (id) { ytCurrent = id; if (yt.getVideoData().title) titles[id] = yt.getVideoData().title; }
+  if (mode === 'yt') renderNow();
+}
+
+// The embedded player doesn't switch playlists reliably (a new playlist request plays the
+// previously requested one), so every change of source builds a fresh player.
+// `source` is an array of video ids, a single video id, or a playlist id.
+function makePlayer(source, autoplay) {
+  if (yt) yt.destroy();
+  ytReady = false;
+  ytState = -1;
+  document.body.classList.remove('ytplaying');
+  $('ytBox').innerHTML = '<div id="ytPlayer"></div>';
+  const vars = { playsinline: 1, rel: 0 };
+  let videoId;
+  // the first id also has to be in `playlist`, or the player skips it
+  if (Array.isArray(source)) { videoId = source[0]; vars.playlist = source.join(','); }
+  else if (/^[\w-]{11}$/.test(source)) videoId = source;
+  else { vars.listType = 'playlist'; vars.list = source; }
+  yt = new YT.Player('ytPlayer', {
+    width: 200, height: 200, playerVars: vars,
+    // the player rejects an empty videoId, so it's only set for single videos and id lists
+    ...(videoId && { videoId }),
+    events: {
+      onReady: () => {
+        ytReady = true;
+        yt.setVolume($('vol').value * 100);
+        yt.setShuffle(shuffle);
+        if (autoplay) yt.playVideo();
+      },
+      onStateChange: onYTState,
+    },
+  });
+}
+
 function loadYTTheme(autoplay) {
-  if (!ytReady || ytTheme === theme) return;
+  if (!apiReady || ytTheme === theme) return;
   ytTheme = theme;
   ytCurrent = null;
-  // Prefer the videos matched to the local library; the player accepts at most 200 at a time
-  let matched = (YT_SONGS[theme] || []).map(s => s.id);
-  if (matched.length) {
-    if (matched.length > 200) matched = matched.sort(() => Math.random() - 0.5).slice(0, 200);
-    ytSongs[theme] = matched;
-    if (autoplay) yt.loadPlaylist(matched); else yt.cuePlaylist(matched);
-    yt.setShuffle(shuffle);
+  renderOwnNote();
+  // The visitor's own playlist wins, then videos matched to the local library (at most 200),
+  // then the theme's playlist from playlists.js
+  const own = ownLists[theme];
+  let matched = own ? [] : (YT_SONGS[theme] || []).map(s => s.id);
+  if (matched.length > 200) matched = matched.sort(() => Math.random() - 0.5).slice(0, 200);
+  const source = matched.length ? matched : own || YT_PLAYLISTS[theme];
+  if (!source) {
+    if (yt) yt.destroy();
+    yt = null;
+    ytReady = false;
+    ytState = -1;
+    document.body.classList.remove('ytplaying');
+    ytSongs[theme] = [];
     renderList();
+    renderNow();
     return;
   }
-  const list = YT_PLAYLISTS[theme];
-  if (!list) { yt.stopVideo(); ytSongs[theme] = []; renderList(); renderNow(); return; }
-  // A video ID is 11 characters; anything else is treated as a playlist ID
-  if (/^[\w-]{11}$/.test(list)) {
-    ytSongs[theme] = [list];
-    fetchTitles([list]);
-    if (autoplay) yt.loadVideoById(list); else yt.cueVideoById(list);
-  } else {
-    const opts = { list, listType: 'playlist', index: 0 };
-    if (autoplay) yt.loadPlaylist(opts); else yt.cuePlaylist(opts);
-    yt.setShuffle(shuffle);
-  }
+  if (Array.isArray(source)) ytSongs[theme] = source;
+  else if (/^[\w-]{11}$/.test(source)) { ytSongs[theme] = [source]; fetchTitles([source]); }
+  makePlayer(source, autoplay);
+  renderList();
 }
 
 // Song titles for the list, a few requests at a time
@@ -363,3 +404,41 @@ function setMode(next) {
   renderNow();
 }
 $('srcBtn').onclick = () => setMode(mode === 'yt' ? 'local' : 'yt');
+
+// ---------- the visitor's own YouTube playlist ----------
+// Accepts playlist links (?list=), video links (?v= or youtu.be/…) or a bare ID
+function parseYT(text) {
+  const t = text.trim();
+  try {
+    const u = new URL(t);
+    const id = u.searchParams.get('list') || u.searchParams.get('v') || (u.hostname.endsWith('youtu.be') ? u.pathname.slice(1) : '');
+    if (/^[\w-]{11,}$/.test(id)) return id;
+  } catch {}
+  return /^[\w-]{11,}$/.test(t) ? t : null;
+}
+function renderOwnNote(msg) {
+  $('ownNote').innerHTML = msg || (ownLists[theme] ? '🎵 Aapki playlist chal rahi hai · <button type="button" data-reset="1">Default gaane</button>' : '');
+}
+// Reload this theme's YouTube source after the visitor picks or clears their own playlist
+function reloadYT() {
+  ytTheme = null;
+  loadYTTheme(true);
+  renderList();
+}
+$('ownForm').onsubmit = async e => {
+  e.preventDefault();
+  // Liked music (LM), Liked videos (LL) and Watch later (WL) are always private to the account
+  const special = /[?&]list=(LM|LL|WL)\b/.exec($('ownUrl').value)?.[1] || /^(LM|LL|WL)$/.exec($('ownUrl').value.trim())?.[1];
+  if (special) return renderOwnNote(`⚠️ "${{ LM: 'Liked music', LL: 'Liked videos', WL: 'Watch later' }[special]}" YouTube ki private list hai, website pe nahi chalti. Iske gaane ek naye Public/Unlisted playlist mein daalo (⋮ → Add to playlist) aur uska link yahan paste karo.`);
+  const id = parseYT($('ownUrl').value);
+  if (!id) return renderOwnNote('⚠️ Ye YouTube link samajh nahi aaya. Playlist ya video ka link paste karo.');
+  renderOwnNote('Check ho raha hai…');
+  // oEmbed answers only for public/unlisted, embeddable playlists and videos
+  const page = id.length === 11 ? `https://www.youtube.com/watch?v=${id}` : `https://www.youtube.com/playlist?list=${id}`;
+  const ok = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(page)}&format=json`).then(r => r.ok).catch(() => false);
+  if (!ok) return renderOwnNote('⚠️ Ye playlist nahi chal sakti. Public ya Unlisted honi chahiye (Private nahi).');
+  ownLists[theme] = id;
+  saveOwn();
+  $('ownUrl').value = '';
+  reloadYT();
+};
