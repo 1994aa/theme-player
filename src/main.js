@@ -21,6 +21,11 @@ let mode = 'yt', hasLocal = false;
 let yt, ytReady = false, ytState = -1, ytTheme = null, ytCurrent = null;
 const ytSongs = {};
 
+// Songs the visitor picks from their own phone or computer: file name -> blob URL.
+// They play only in this browser tab (nothing is uploaded) and apply to every theme.
+const deviceSongs = new Map();
+const AUDIO_EXT = /\.(mp3|m4a|aac|ogg|opus|wav|flac)$/i;
+
 // Visitors can play their own YouTube playlist (or video) in any theme; saved per theme in this browser
 let ownLists = {};
 try { ownLists = JSON.parse(localStorage.getItem('dhun-own-playlists')) || {}; } catch {}
@@ -44,7 +49,7 @@ const pretty = f => f
   .replace(/[\s-]+$/, '')
   .trim();
 const time = s => isFinite(s) ? `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}` : '0:00';
-const list = () => (mode === 'yt' ? ytSongs[theme] : showAll ? songs.all : songs[theme]) || [];
+const list = () => (mode === 'yt' ? ytSongs[theme] : deviceSongs.size ? [...deviceSongs.keys()] : showAll ? songs.all : songs[theme]) || [];
 const playing = () => (mode === 'yt' ? ytCurrent : current);
 
 // ---------- theme picker ----------
@@ -92,7 +97,8 @@ addEventListener('hashchange', route);
 function renderList() {
   const l = list();
   const t = THEMES[theme];
-  $('scope').hidden = mode === 'yt';
+  $('scope').hidden = mode === 'yt' || deviceSongs.size > 0;
+  $('devNote').innerHTML = deviceSongs.size ? `📱 Aapke device ke ${deviceSongs.size} gaane · <button type="button" data-cleardev="1">Hatao</button>` : '';
   $('scope').innerHTML = `<button data-scope="theme" class="${showAll ? '' : 'on'}">${t ? t.emoji : ''} Is theme ke (${(songs[theme] || []).length})</button><button data-scope="all" class="${showAll ? 'on' : ''}">Sab gaane (${songs.all.length})</button>`;
   // Search: every typed word must appear in the song's name or file name
   const words = $('search').value.toLowerCase().split(/\s+/).filter(Boolean);
@@ -114,7 +120,7 @@ function renderNow() {
   const cur = playing(), pos = l.indexOf(cur);
   $('count').textContent = l.length ? `${pos < 0 ? '–' : pos + 1} / ${l.length}` : '0 gaane';
   $('title').textContent = cur ? name(cur) : l.length ? '▶ dabao aur shuru karo' : 'Koi gaana nahi';
-  $('srcBtn').textContent = mode === 'yt' ? '▶ YouTube' : '📁 Local';
+  $('srcBtn').textContent = mode === 'yt' ? '▶ YouTube' : deviceSongs.size ? '📱 Mere gaane' : '📁 Local';
   $('play').textContent = isPaused() ? '▶' : '⏸';
   document.body.classList.toggle('playing', !isPaused());
   document.querySelectorAll('#list button[data-i]').forEach(b => b.classList.toggle('on', l[+b.dataset.i] === cur));
@@ -143,7 +149,7 @@ function play(i) {
   ctx.resume();
   idx = (i + l.length) % l.length;
   current = l[idx];
-  audio.src = `/song?f=${encodeURIComponent(current)}`;
+  audio.src = deviceSongs.get(current) || `/song?f=${encodeURIComponent(current)}`;
   audio.play().catch(() => {});
   renderNow();
 }
@@ -193,6 +199,8 @@ $('listBox').onclick = e => {
     renderList();
     renderNow();
     $('list').querySelector('button.on[data-i]')?.scrollIntoView({ block: 'center' });
+  } else if (b.dataset.cleardev) {
+    clearDeviceSongs();
   } else if (b.dataset.reset) {
     delete ownLists[theme];
     saveOwn();
@@ -275,7 +283,6 @@ fetch('/songs.json')
     if (Array.isArray(data)) songs = { all: data, ...Object.fromEntries(Object.keys(THEMES).map(k => [k, data])) };
     else if (data && data.all) songs = data;
     hasLocal = songs.all.length > 0;
-    $('srcBtn').hidden = !hasLocal;
     startYT();
     route();
     if (theme) { renderList(); renderNow(); }
@@ -388,7 +395,7 @@ async function fetchTitles(ids) {
 
 // ---------- switching between YouTube and local songs (only when local songs exist) ----------
 function setMode(next) {
-  if (next === mode || (next === 'local' && !hasLocal)) return;
+  if (next === mode || (next === 'local' && !hasLocal && !deviceSongs.size)) return;
   const wasPlaying = !isPaused();
   if (mode === 'yt' && ytReady) yt.pauseVideo(); else audio.pause();
   mode = next;
@@ -403,7 +410,31 @@ function setMode(next) {
   renderList();
   renderNow();
 }
-$('srcBtn').onclick = () => setMode(mode === 'yt' ? 'local' : 'yt');
+// Without any local songs yet, the button asks for songs from the visitor's device first
+$('srcBtn').onclick = () => (mode === 'yt' && !hasLocal && !deviceSongs.size ? $('fileIn').click() : setMode(mode === 'yt' ? 'local' : 'yt'));
+
+function addDeviceSongs(files) {
+  const picked = [...files].filter(f => f.type.startsWith('audio/') || AUDIO_EXT.test(f.name)).sort((a, b) => a.name.localeCompare(b.name));
+  if (!picked.length) return;
+  for (const f of picked) if (!deviceSongs.has(f.name)) deviceSongs.set(f.name, URL.createObjectURL(f));
+  if (mode !== 'local') setMode('local');
+  play(list().indexOf(picked[0].name));
+  renderList();
+}
+function clearDeviceSongs() {
+  audio.pause();
+  audio.removeAttribute('src');
+  current = null;
+  for (const url of deviceSongs.values()) URL.revokeObjectURL(url);
+  deviceSongs.clear();
+  if (!hasLocal) setMode('yt');
+  renderList();
+  renderNow();
+}
+$('pickFiles').onclick = () => $('fileIn').click();
+$('pickFolder').onclick = () => $('folderIn').click();
+$('pickFolder').hidden = !('webkitdirectory' in $('folderIn'));
+$('fileIn').onchange = $('folderIn').onchange = e => { addDeviceSongs(e.target.files); e.target.value = ''; };
 
 // ---------- the visitor's own YouTube playlist ----------
 // Accepts playlist links (?list=), video links (?v= or youtu.be/…) or a bare ID

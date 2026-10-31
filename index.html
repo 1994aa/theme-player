@@ -34,6 +34,13 @@
             <button type="submit">Chalao</button>
           </form>
           <p class="ownnote" id="ownNote"></p>
+          <div class="devbox">
+            <button type="button" id="pickFiles">📁 Apne gaane chuno</button>
+            <button type="button" id="pickFolder">🗂️ Poora folder</button>
+          </div>
+          <p class="devnote" id="devNote"></p>
+          <input type="file" id="fileIn" accept="audio/*" multiple hidden>
+          <input type="file" id="folderIn" webkitdirectory multiple hidden>
           <div class="scope" id="scope"></div>
           <input type="search" id="search" placeholder="🔍 Gaana, singer ya film dhoondo…" autocomplete="off" aria-label="Gaana dhoondo">
           <ol class="list" id="list"></ol>
@@ -53,7 +60,7 @@
           <div class="side">
             <div class="eq" id="eq" aria-hidden="true"></div>
             <input type="range" id="vol" min="0" max="1" step="0.01" value="0.9" aria-label="Volume">
-            <button id="srcBtn" hidden title="YouTube ya local gaane">▶ YouTube</button>
+            <button id="srcBtn" title="YouTube ya apne gaane">▶ YouTube</button>
             <button id="listBtn" title="Song list" aria-expanded="false" aria-controls="list">☰</button>
           </div>
         </div>
